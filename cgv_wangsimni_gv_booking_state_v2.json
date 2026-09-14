@@ -1,5 +1,19 @@
 {
   "schema": "CGV_WANGSIMNI_GV_ONLY_V2_20260914",
-  "updated_at_kst": "2026-09-14T11:40:59.443375+09:00",
-  "shows": {}
+  "updated_at_kst": "2026-09-14T17:11:02.143847+09:00",
+  "shows": {
+    "0074|20260926|30001314|20056916|007|5|1810|GV": {
+      "status": "SOLD_OUT",
+      "date": "20260926",
+      "type": "GV",
+      "movie": "암살자(들)",
+      "mov_no": "30001314",
+      "prod_no": "20056916",
+      "screen": "7관 (Laser)",
+      "time": "1810",
+      "end_time": "2031",
+      "status_source": "frSeatCnt=0",
+      "updated_at_kst": "2026-09-14T17:10:49.699749+09:00"
+    }
+  }
 }
