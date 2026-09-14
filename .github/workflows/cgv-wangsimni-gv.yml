@@ -1,0 +1,213 @@
+name: CGV Wangsimni GV Monitor
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    # KST 06:12
+    - cron: "12 21 * * *"
+
+    # KST 11:42
+    - cron: "42 2 * * *"
+
+    # KST 17:12
+    - cron: "12 8 * * *"
+
+    # KST 22:42
+    - cron: "42 13 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cgv-wangsimni-gv-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependency
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install requests
+
+      - name: Verify Wangsimni GV source
+        shell: bash
+        run: |
+          python -m py_compile cgv_wangsimni_gv.py
+
+          python - <<'PY'
+          from pathlib import Path
+          import sys
+
+          text = Path("cgv_wangsimni_gv.py").read_text(
+              encoding="utf-8"
+          )
+
+          required = [
+              'SITE_NO = "0074"',
+              'SITE_NAME = "CGV 왕십리"',
+              'GV_CODE = "0023"',
+              'DAYS = 43',
+              'FAST_SCAN_MINUTES = {0, 30}',
+              'FAST_SCAN_START_OFFSET = 4',
+              'FAST_SCAN_END_OFFSET = 21',
+              'FAST_SCAN_WORKERS = 2',
+              'CGV WANGSIMNI GV-ONLY MONITOR',
+              'STATE_FILE = "seen_cgv_wangsimni_gv_v2.json"',
+              'BOOKING_STATE_FILE = "cgv_wangsimni_gv_booking_state_v2.json"',
+          ]
+
+          missing = [
+              x for x in required
+              if x not in text
+          ]
+
+          if missing:
+              print(
+                  "❌ 왕십리 GV 소스 검증 실패:",
+                  ", ".join(missing)
+              )
+              sys.exit(1)
+
+          print("✅ CGV 왕십리 GV ONLY 소스 검증 통과")
+          PY
+
+      - name: Check secrets
+        env:
+          CY_WEBHOOK: ${{ secrets.CY_WEBHOOK }}
+          DISCORD_MENTION_ID: ${{ secrets.DISCORD_MENTION_ID }}
+        shell: bash
+        run: |
+          test -n "$CY_WEBHOOK" || {
+            echo "❌ CY_WEBHOOK secret missing"
+            exit 1
+          }
+
+          test -n "$DISCORD_MENTION_ID" || {
+            echo "❌ DISCORD_MENTION_ID secret missing"
+            exit 1
+          }
+
+          echo "✅ Discord secrets loaded"
+
+      - name: Set monitoring duration
+        id: duration
+        shell: bash
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          now = datetime.now(
+              ZoneInfo("Asia/Seoul")
+          )
+
+          # 잘 되던 방식:
+          # 다음 정규 실행 직전까지 계속 감시
+          cutoffs = [
+              (6, 11),
+              (11, 41),
+              (17, 11),
+              (22, 41),
+              (23, 59),
+          ]
+
+          target = None
+
+          for hour, minute in cutoffs:
+              candidate = now.replace(
+                  hour=hour,
+                  minute=minute,
+                  second=0,
+                  microsecond=0,
+              )
+
+              if candidate > now:
+                  target = candidate
+                  break
+
+          if not (6 <= now.hour <= 23):
+              seconds = 60
+
+          elif target is None:
+              seconds = 60
+
+          else:
+              seconds = max(
+                  60,
+                  int(
+                      (target - now).total_seconds()
+                  ),
+              )
+
+          print(f"seconds={seconds}")
+          PY
+
+      - name: Run Wangsimni GV monitor
+        env:
+          CY_WEBHOOK: ${{ secrets.CY_WEBHOOK }}
+          DISCORD_MENTION_ID: ${{ secrets.DISCORD_MENTION_ID }}
+          RUN_SECONDS: ${{ steps.duration.outputs.seconds }}
+        shell: bash
+        run: |
+          echo "✅ WANGSIMNI GV RUN_SECONDS=${RUN_SECONDS}"
+          python -u cgv_wangsimni_gv.py
+
+      - name: Save Wangsimni GV state
+        if: always()
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add \
+            seen_cgv_wangsimni_gv_v2.json \
+            baseline_cgv_wangsimni_gv_v2.done \
+            cgv_wangsimni_gv_booking_state_v2.json \
+            2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "No Wangsimni GV state changes"
+            exit 0
+          fi
+
+          git commit \
+            -m "Update CGV Wangsimni GV state"
+
+          for attempt in 1 2 3
+          do
+            if \
+              git pull --rebase origin "${GITHUB_REF_NAME}" \
+              && \
+              git push origin \
+                "HEAD:${GITHUB_REF_NAME}"
+            then
+              exit 0
+            fi
+
+            git rebase --abort \
+              2>/dev/null || true
+
+            git fetch origin \
+              "${GITHUB_REF_NAME}"
+
+            sleep $((attempt * 2))
+          done
+
+          echo "❌ 왕십리 GV 상태 저장 실패"
+          exit 1
