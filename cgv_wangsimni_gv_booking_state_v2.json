@@ -1,6 +1,6 @@
 {
   "schema": "CGV_WANGSIMNI_GV_ONLY_V2_20260914",
-  "updated_at_kst": "2026-09-17T22:40:59.385613+09:00",
+  "updated_at_kst": "2026-09-18T11:40:59.329401+09:00",
   "shows": {
     "0074|20260926|30001314|20056916|007|5|1810|GV": {
       "status": "SOLD_OUT",
@@ -13,7 +13,7 @@
       "time": "1810",
       "end_time": "2031",
       "status_source": "frSeatCnt=0",
-      "updated_at_kst": "2026-09-17T22:40:49.641798+09:00"
+      "updated_at_kst": "2026-09-18T11:40:49.473681+09:00"
     }
   }
 }
